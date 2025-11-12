@@ -9,6 +9,7 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 ## Fonctionnalites
 
 ### Panel Utilisateur (A implementer)
+
 - Creation de compte utilisateur
 - Connexion utilisateur
 - Envoi de fichiers chiffres
@@ -16,28 +17,29 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 ### Panel Admin (F-A1 a F-A6)
 
 - **F-A1** : Connexion securisee (Interface Admin) ✅
+
   - Authentification avec hashage SHA-256
   - Verification dans la base de donnees MariaDB
-
 - **F-A2** : Dashboard de supervision des fichiers en attente ✅
+
   - Affichage de tous les fichiers en attente
   - Informations detaillees (ID, nom, source, destinataire, statut)
-
 - **F-A3** : Telecharger et dechiffrer un fichier en attente (A implementer)
+
   - Selection d'un fichier depuis le dashboard
   - Telechargement et dechiffrement avec la cle privee Admin
-
 - **F-A4** : Fonction 'Valider' un fichier (A implementer)
+
   - Validation d'un fichier en attente
   - Chiffrement pour le destinataire B
   - Envoi/notification au destinataire
-
 - **F-A5** : Fonction 'Rejeter' un fichier (A implementer)
+
   - Rejet d'un fichier en attente
   - Suppression du fichier
   - Notification a l'expediteur A
-
 - **F-A6** : Interface d'audit des messages (A implementer)
+
   - Affichage de tous les messages/fichiers echanges
   - Dechiffrement avec la cle privee Admin
   - Consultation a posteriori
@@ -45,21 +47,25 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 ## Pre-requis
 
 ### Systeme
+
 - Windows (teste sur Windows 10/11)
 - Compilateur GCC (MinGW/MSYS2)
 - Serveur MariaDB accessible en reseau
 
 ### Bibliotheques
+
 - **MariaDB Connector/C 3.3.8** (64-bit)
+
   - Telechargement : https://mariadb.com/downloads/connectors/connectors-data/mariadb-connector-c/
   - Installation : Installer le package MSI "mariadb-connector-c-3.3.8-win64.msi"
   - Chemin d'installation par defaut : `C:\Program Files\MariaDB\MariaDB Connector C 64-bit\`
-
 - **OpenSSL** (pour le hashage SHA-256)
+
   - Inclus dans MSYS2/MinGW64
   - Ou telecharger depuis : https://slproweb.com/products/Win32OpenSSL.html
 
 ### Base de donnees
+
 - **MariaDB** (serveur distant)
   - Adresse IP : 192.168.86.128 (a adapter selon votre configuration)
   - Base de donnees : `projet_c`
@@ -69,20 +75,25 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 ## Installation
 
 ### 1. Installer MariaDB Connector/C 3.3.8
+
 1. Telecharger `mariadb-connector-c-3.3.8-win64.msi` depuis le site officiel MariaDB
 2. Installer avec l'option "Typical" (inclut Development Components et DLL Libraries)
 3. Noter le chemin d'installation (generalement `C:\Program Files\MariaDB\MariaDB Connector C 64-bit\`)
 
 ### 2. Preparer la base de donnees
+
 1. Se connecter au serveur MariaDB
 2. Executer le script SQL `Code_bdd.sql` pour creer la base et les tables :
    ```sql
    mysql -u root -p < Code_bdd.sql
    ```
+
    Ou executer manuellement les commandes SQL du fichier.
 
 ### 3. Configurer la connexion
+
 Modifier dans `admin_connexion.c` et `admin_panel.c` :
+
 - Adresse IP du serveur MariaDB
 - Nom d'utilisateur de la base de donnees
 - Mot de passe de la base de donnees
@@ -97,12 +108,14 @@ gcc main.c admin_connexion.c admin_panel.c -o Messagard -I"C:\Program Files\Mari
 ```
 
 ### Explication des flags
+
 - `-I"..."` : Chemin vers les fichiers d'en-tete (headers) MariaDB
 - `-L"..."` : Chemin vers les bibliotheques MariaDB et OpenSSL
 - `-lmariadb` : Lier la bibliotheque MariaDB
 - `-lssl -lcrypto` : Lier les bibliotheques OpenSSL pour le hashage SHA-256
 
 ### Note importante
+
 Si vous utilisez une version differente de MariaDB Connector/C ou si l'installation est dans un autre dossier, adaptez les chemins `-I` et `-L` dans la commande de compilation.
 
 ## Execution
@@ -130,6 +143,7 @@ Projet-c/
 ### Tables
 
 #### Table `utilisateur`
+
 - `id` : INT PRIMARY KEY AUTO_INCREMENT
 - `nom` : VARCHAR(50)
 - `email` : VARCHAR(100)
@@ -137,6 +151,7 @@ Projet-c/
 - `admin` : TINYINT(1) - 1 = admin, 0 = client
 
 #### Table `fichier`
+
 - `id` : INT PRIMARY KEY AUTO_INCREMENT
 - `nom` : VARCHAR(100)
 - `chemin` : VARCHAR(260)
@@ -163,4 +178,3 @@ Projet developpe dans le cadre d'un projet academique.
 ## Licence
 
 A definir selon les besoins du projet.
-
