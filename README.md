@@ -14,35 +14,34 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 - Connexion utilisateur
 - Envoi de fichiers chiffres
 
-### Panel Admin (F-A1 a F-A6)
+# 🛡️ Messagard - Application de Messagerie Chiffrée
 
-- **F-A1** : Connexion securisee (Interface Admin) ✅
+> **Statut :** Prototype Fonctionnel (Partie Admin partielle)  
+> **Langage :** C (Standard C11)  
+> **Système :** Windows (MinGW/MSYS2)  
+> **Dépendances :** OpenSSL, MariaDB Connector/C, OpenSSH Client
 
-  - Authentification avec hashage SHA-256
-  - Verification dans la base de donnees MariaDB
-- **F-A2** : Dashboard de supervision des fichiers en attente ✅
+Messagard est une application de messagerie sécurisée permettant l'échange de fichiers chiffrés. Elle repose sur une architecture centralisée où un administrateur supervise, valide ou rejette les transferts de fichiers entre utilisateurs via une interface dédiée.
 
-  - Affichage de tous les fichiers en attente
-  - Informations detaillees (ID, nom, source, destinataire, statut)
-- **F-A3** : Telecharger et dechiffrer un fichier en attente (A implementer)
+## 🚀 Fonctionnalités
 
-  - Selection d'un fichier depuis le dashboard
-  - Telechargement et dechiffrement avec la cle privee Admin
-- **F-A4** : Fonction 'Valider' un fichier (A implementer)
+### 🔧 Système & Démarrage
 
-  - Validation d'un fichier en attente
-  - Chiffrement pour le destinataire B
-  - Envoi/notification au destinataire
-- **F-A5** : Fonction 'Rejeter' un fichier (A implementer)
+- **Initialisation automatique :** Au premier lancement, l'application vérifie l'existence du dossier `.secrets`.
+- **Génération de clés (PKI) :** Si absentes, une paire de clés RSA 2048 bits est générée localement via des appels système à OpenSSL.
 
-  - Rejet d'un fichier en attente
-  - Suppression du fichier
-  - Notification a l'expediteur A
-- **F-A6** : Interface d'audit des messages (A implementer)
+### 👮 Panel Admin (Supervision)
 
-  - Affichage de tous les messages/fichiers echanges
-  - Dechiffrement avec la cle privee Admin
-  - Consultation a posteriori
+Le module d'administration permet la modération des fichiers. Voici l'état actuel du développement :
+
+| ID       | Fonctionnalité        | État | Description Technique                                                           |
+| :------- | :-------------------- | :--: | :------------------------------------------------------------------------------ |
+| **F-A1** | **Connexion**         |  ✅  | Auth SHA-256 + Injection auto de la clé publique admin en BDD.                  |
+| **F-A2** | **Dashboard**         |  ✅  | Visualisation SQL des fichiers en attente (Source/Destinataire/ID).             |
+| **F-A3** | **Télécharger**       |  ✅  | Récupération SCP + Déchiffrement RSA local (Clé privée Admin).                  |
+| **F-A4** | **Valider**           |  ✅  | Rechiffrement (Clé publique Destinataire) + Envoi SCP + Update statut 'valide'. |
+| **F-A5** | **Rejeter**           |  ✅  | Suppression distante (SSH rm) + Nettoyage local + Update statut 'rejete'.       |
+| **F-A6** | **Interface d'audit** |  ❌  | **À implémenter** (Interface d'audit des messages et historique).               |
 
 ## Pre-requis
 
@@ -59,6 +58,7 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
   - Telechargement : https://mariadb.com/downloads/connectors/connectors-data/mariadb-connector-c/
   - Installation : Installer le package MSI "mariadb-connector-c-3.3.8-win64.msi"
   - Chemin d'installation par defaut : `C:\Program Files\MariaDB\MariaDB Connector C 64-bit\`
+
 - **OpenSSL** (pour le hashage SHA-256)
 
   - Inclus dans MSYS2/MinGW64
@@ -84,6 +84,7 @@ Messagard est une application de messagerie chiffree permettant aux utilisateurs
 
 1. Se connecter au serveur MariaDB
 2. Executer le script SQL `Code_bdd.sql` pour creer la base et les tables :
+
    ```sql
    mysql -u root -p < Code_bdd.sql
    ```
@@ -124,18 +125,23 @@ Si vous utilisez une version differente de MariaDB Connector/C ou si l'installat
 .\Messagard.exe
 ```
 
-## Structure du projet
+## 📂 Structure du Projet
+
+Voici l'organisation des fichiers source et des dossiers générés par l'application :
 
 ```
 Projet-c/
-├── main.c                  # Point d'entree, menu principal
-├── admin_connexion.c       # Gestion de la connexion admin
-├── admin_connexion.h       # Headers pour la connexion admin
-├── admin_panel.c           # Panel d'administration (dashboard, validation, etc.)
-├── admin_panel.h           # Headers pour le panel admin
-├── admin.h                 # Headers generaux admin
-├── Code_bdd.sql            # Script SQL pour creer la base de donnees
-└── README.md               # Ce fichier
+├── .secrets/                   # Dossier généré automatiquement (contient les clés RSA)
+│   ├── private_key.pem         # Clé privée Admin (ne doit pas être partagée)
+│   └── public_key.pem          # Clé publique Admin (envoyée à la BDD à la connexion)
+├── main.c                      # Point d'entrée : Menu principal, vérification des clés
+├── admin_connexion.c           # Gestion de la connexion Admin (Auth & Hashage)
+├── admin_connexion.h           # Headers connexion
+├── admin_panel.c               # Logique Admin : Dashboard, SCP, Chiffrement OpenSSL
+├── admin_panel.h               # Headers panel
+├── admin.h                     # Headers généraux
+├── Code_bdd.sql                # Script SQL de création de la base de données
+└── README.md                   # Documentation
 ```
 
 ## Configuration de la base de donnees
