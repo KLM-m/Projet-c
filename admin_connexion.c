@@ -5,6 +5,7 @@
 #include <mysql.h>
 #include "admin_connexion.h"
 #include "admin_panel.h"
+#include "database.h"
 
 // Fonction pour hasher un mot de passe en SHA-256
 void hash_password(const char* password, char* hash_output) {
@@ -49,9 +50,8 @@ int menu_admin_connexion() {
     char hash_saisi[65];
     hash_password(mot_de_passe, hash_saisi);
 
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, "192.168.86.128", "testuser", "Azerty01", "projet_c", 0, NULL, 0)) {
-        printf("Erreur de connexion a la BDD : %s\n", mysql_error(conn));
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
         return 0;
     }
 

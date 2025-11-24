@@ -8,6 +8,7 @@
 #include <openssl/evp.h>
 #include <openssl/core_names.h>
 #include "admin_panel.h"
+#include "database.h"
 
 static void construire_base_nom(const char* nom_fichier, char* base_nom, size_t max) {
     strncpy(base_nom, nom_fichier, max-1);
@@ -133,7 +134,7 @@ void panel_admin() {
         printf("2 - Telecharger et dechiffrer un fichier\n");
         printf("3 - Valider un fichier\n");
         printf("4 - Rejeter un fichier\n");
-        printf("5 - Interface d'audit des messages\n");
+        printf("5 - Historique des messages\n");
         printf("0 - Deconnexion\n");
         printf("========================================\n");
         printf("Votre choix : ");
@@ -153,7 +154,7 @@ void panel_admin() {
                 rejeter_fichier();
                 break;
             case 5:
-                printf("Fonctionnalite a implementer (F-A6)\n");
+                audit_messages();
                 break;
             case 0:
                 printf("Deconnexion...\n");
@@ -164,10 +165,62 @@ void panel_admin() {
     }
 }
 
+void audit_messages() {
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
+        return;
+    }
+
+    // Requête pour récupérer tous les fichiers, tous statuts confondus
+    char requete[500];
+    sprintf(requete, "SELECT f.id, f.nom, u1.nom as nom_source, u2.nom as nom_dest, f.statut FROM fichier f LEFT JOIN utilisateur u1 ON f.id_utilisateur_source = u1.id LEFT JOIN utilisateur u2 ON f.id_utilisateur_destinataire = u2.id ORDER BY f.id DESC");
+
+    if(mysql_query(conn, requete)) {
+        printf("Erreur requete : %s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    MYSQL_RES *resultat = mysql_store_result(conn);
+    if (!resultat) {
+        printf("Erreur lors de la recuperation des resultats.\n");
+        mysql_close(conn);
+        return;
+    }
+
+    int num_rows = mysql_num_rows(resultat);
+
+    printf("\n========================================\n");
+    printf("   HISTORIQUE DES MESSAGES\n");
+    printf("========================================\n");
+    printf("Nombre total de transactions : %d\n", num_rows);
+    printf("========================================\n");
+
+    if (num_rows > 0) {
+        // En-tête du tableau
+        printf("%-5s | %-30s | %-15s | %-15s | %-15s\n", "ID", "Nom fichier", "Source", "Destinataire", "Statut");
+        printf("----------------------------------------------------------------------------------------\n");
+
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(resultat))) {
+            printf("%-5s | %-30s | %-15s | %-15s | %-15s\n",
+                   row[0] ? row[0] : "N/A",   // ID
+                   row[1] ? row[1] : "N/A",   // Nom fichier
+                   row[2] ? row[2] : "Inconnu", // Nom source
+                   row[3] ? row[3] : "Inconnu", // Nom destinataire
+                   row[4] ? row[4] : "N/A");  // Statut
+        }
+    }
+
+    printf("========================================\n");
+
+    mysql_free_result(resultat);
+    mysql_close(conn);
+}
+
 void dashboard_fichiers_attente() {
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, "192.168.86.128", "testuser", "Azerty01", "projet_c", 0, NULL, 0)) {
-        printf("Erreur de connexion a la BDD : %s\n", mysql_error(conn));
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
         return;
     }
     
@@ -229,9 +282,8 @@ void telecharger_et_dechiffrer_fichier() {
     printf("\nEntrez l'ID du fichier a telecharger et dechiffrer : ");
     scanf("%d", &id_fichier);
     
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, "192.168.86.128", "testuser", "Azerty01", "projet_c", 0, NULL, 0)) {
-        printf("Erreur de connexion a la BDD : %s\n", mysql_error(conn));
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
         return;
     }
     
@@ -368,9 +420,8 @@ void valider_fichier() {
     printf("\nEntrez l'ID du fichier a valider : ");
     scanf("%d", &id_fichier);
 
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, "192.168.86.128", "testuser", "Azerty01", "projet_c", 0, NULL, 0)) {
-        printf("Erreur de connexion a la BDD : %s\n", mysql_error(conn));
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
         return;
     }
 
@@ -509,6 +560,27 @@ void valider_fichier() {
         }
 
         if(resscp == 0) {
+            // ARCHIVAGE (F-A6) : On déplace le fichier original chiffré pour l'admin
+            // au lieu de le supprimer.
+            char cmd_ssh_archive[1200];
+            char chemin_original_distant[512];
+            MYSQL* conn_archive = get_db_connection();
+            if(conn_archive) {
+            sprintf(cmd_ssh_archive, "SELECT chemin FROM fichier WHERE id=%d", id_fichier);
+            if (mysql_query(conn_archive, cmd_ssh_archive) == 0) {
+                MYSQL_RES* res_archive = mysql_store_result(conn_archive);
+                MYSQL_ROW row_archive = mysql_fetch_row(res_archive);
+                if (row_archive && row_archive[0]) {
+                    snprintf(chemin_original_distant, sizeof(chemin_original_distant), "%s", row_archive[0]);
+                    // Commande pour créer le dossier d'archives et y déplacer le fichier
+                    snprintf(cmd_ssh_archive, sizeof(cmd_ssh_archive), "ssh %s@%s \"mkdir -p /home/adix/archives && mv %s /home/adix/archives/\"", user_ssh, ip_serveur, chemin_original_distant);
+                    system(cmd_ssh_archive);
+                }
+                mysql_free_result(res_archive);
+            }
+            mysql_close(conn_archive);
+            }
+
             // suppression locale du .bin
             remove(nom_sortie);
             // suppression locale du clair
@@ -525,9 +597,8 @@ void rejeter_fichier() {
     printf("\nEntrez l'ID du fichier a rejeter : ");
     scanf("%d", &id_fichier);
 
-    MYSQL *conn = mysql_init(NULL);
-    if (!mysql_real_connect(conn, "192.168.86.128", "testuser", "Azerty01", "projet_c", 0, NULL, 0)) {
-        printf("Erreur de connexion a la BDD : %s\n", mysql_error(conn));
+    MYSQL *conn = get_db_connection();
+    if (!conn) {
         return;
     }
 

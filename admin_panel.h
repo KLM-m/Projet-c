@@ -6,5 +6,6 @@ void dashboard_fichiers_attente();
 void telecharger_et_dechiffrer_fichier();
 void valider_fichier();
 void rejeter_fichier();
+void audit_messages();
 
 #endif

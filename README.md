@@ -34,14 +34,14 @@ Messagard est une application de messagerie sécurisée permettant l'échange de
 
 Le module d'administration permet la modération des fichiers. Voici l'état actuel du développement :
 
-| ID       | Fonctionnalité        | État | Description Technique                                                           |
-| :------- | :-------------------- | :--: | :------------------------------------------------------------------------------ |
-| **F-A1** | **Connexion**         |  ✅  | Auth SHA-256 + Injection auto de la clé publique admin en BDD.                  |
-| **F-A2** | **Dashboard**         |  ✅  | Visualisation SQL des fichiers en attente (Source/Destinataire/ID).             |
-| **F-A3** | **Télécharger**       |  ✅  | Récupération SCP + Déchiffrement RSA local (Clé privée Admin).                  |
-| **F-A4** | **Valider**           |  ✅  | Rechiffrement (Clé publique Destinataire) + Envoi SCP + Update statut 'valide'. |
-| **F-A5** | **Rejeter**           |  ✅  | Suppression distante (SSH rm) + Nettoyage local + Update statut 'rejete'.       |
-| **F-A6** | **Interface d'audit** |  ❌  | **À implémenter** (Interface d'audit des messages et historique).               |
+| ID       | Fonctionnalité              | État | Description Technique                                                            |
+| :------- | :-------------------------- | :--: | :------------------------------------------------------------------------------- |
+| **F-A1** | **Connexion**               |  ✅  | Auth SHA-256 + Injection auto de la clé publique admin en BDD.                   |
+| **F-A2** | **Dashboard**               |  ✅  | Visualisation SQL des fichiers en attente (Source/Destinataire/ID).              |
+| **F-A3** | **Télécharger**             |  ✅  | Récupération SCP + Déchiffrement RSA local (Clé privée Admin).                   |
+| **F-A4** | **Valider**                 |  ✅  | Rechiffrement (Clé publique Destinataire) + Envoi SCP + Update statut 'valide'.  |
+| **F-A5** | **Rejeter**                 |  ✅  | Suppression distante (SSH rm) + Nettoyage local + Update statut 'rejete'.        |
+| **F-A6** | **Historique des messages** |  ✅  | Consultation de l'historique de tous les messages (en attente, validés rejetés). |
 
 ## Pre-requis
 
@@ -105,7 +105,7 @@ Modifier dans `admin_connexion.c` et `admin_panel.c` :
 ### Commande de compilation
 
 ```powershell
-gcc main.c admin_connexion.c admin_panel.c -o Messagard -I"C:\Program Files\MariaDB\MariaDB Connector C 64-bit\include" -L"C:\Program Files\MariaDB\MariaDB Connector C 64-bit\lib" -L"C:/msys64/mingw64/lib" -lmariadb -lssl -lcrypto
+gcc main.c admin_connexion.c admin_panel.c database.c -o Messagard -I"C:\Program Files\MariaDB\MariaDB Connector C 64-bit\include" -L"C:\Program Files\MariaDB\MariaDB Connector C 64-bit\lib" -L"C:/msys64/mingw64/lib" -lmariadb -lssl -lcrypto
 ```
 
 ### Explication des flags
