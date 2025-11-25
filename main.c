@@ -72,17 +72,3 @@ int main() {
     }
     return 0;
 }
-
-// À compléter plus tard :
-void menu_utilisateur() {
-    printf("Panneau utilisateur :\n");
-    printf("1 - Créer un compte\n");
-    printf("2 - Se connecter\n");
-    // Ajoute ici les appels à tes fonctions correspondantes
-}
-
-void menu_admin() {
-    printf("Panneau Admin - Connexion:\n");
-    // Demander email/mot de passe ou autre selon ton système
-    // Appel à la fonction de connexion admin
-}
