@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h> // Pour la nouvelle API
 #include <mysql.h>
 #include "admin_connexion.h"
 #include "admin_panel.h"
@@ -9,12 +10,18 @@
 
 // Fonction pour hasher un mot de passe en SHA-256
 void hash_password(const char* password, char* hash_output) {
+    EVP_MD_CTX *mdctx;
+    const EVP_MD *md;
     unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, password, strlen(password));
-    SHA256_Final(hash, &ctx);
-    
+    unsigned int hash_len;
+
+    md = EVP_get_digestbyname("SHA256");
+    mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestUpdate(mdctx, password, strlen(password));
+    EVP_DigestFinal_ex(mdctx, hash, &hash_len);
+    EVP_MD_CTX_free(mdctx);
+
     // Convertir le hash binaire en string hexadecimale
     for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
         sprintf(hash_output + (i * 2), "%02x", hash[i]);

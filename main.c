@@ -3,6 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h> // Pour mkdir sous Windows
+#endif
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
+#include <openssl/evp.h> // Pour la nouvelle API
 #include "admin_connexion.h"
 
 // Fonction utilitaire : vérifie l'existence d'un fichier
@@ -15,11 +22,14 @@ int fichier_existant(const char* chemin) {
 void creer_dossier_secrets() {
     struct stat st = {0};
     if (stat(".secrets", &st) == -1) {
-        #ifdef _WIN32
-        mkdir(".secrets");
-        #else
-        mkdir(".secrets", 0700);
-        #endif
+        // mkdir retourne 0 en cas de succès
+        if (mkdir(".secrets"
+#ifndef _WIN32
+        , 0700
+#endif
+        ) != 0) {
+            perror("Impossible de créer le dossier .secrets");
+        }
     }
 }
 
@@ -27,13 +37,45 @@ void creer_dossier_secrets() {
 void verifier_ou_generer_cle_locale() {
     creer_dossier_secrets();
     if (!fichier_existant(".secrets/private_key.pem") || !fichier_existant(".secrets/public_key.pem")) {
-        #ifdef _WIN32
-        system("mkdir .secrets");
-        #else
-        system("mkdir -p .secrets");
-        #endif
-        system("openssl genrsa -out .secrets/private_key.pem 2048");
-        system("openssl rsa -in .secrets/private_key.pem -pubout -out .secrets/public_key.pem");
+        printf("Génération de la paire de clés RSA (2048 bits)...\n");
+
+        EVP_PKEY *pkey = NULL;
+        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+
+        if (!ctx || EVP_PKEY_keygen_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
+            fprintf(stderr, "Erreur lors de la génération de la clé RSA.\n");
+            ERR_print_errors_fp(stderr);
+            if(ctx) EVP_PKEY_CTX_free(ctx);
+            return;
+        }
+
+        if (EVP_PKEY_generate(ctx, &pkey) <= 0) {
+            fprintf(stderr, "Erreur lors de la génération de la clé RSA.\n");
+            ERR_print_errors_fp(stderr);
+            EVP_PKEY_CTX_free(ctx);
+            return;
+        }
+        EVP_PKEY_CTX_free(ctx);
+
+        // Sauvegarder la clé privée
+        FILE *private_key_file = fopen(".secrets/private_key.pem", "wb");
+        if (!private_key_file) {
+            perror("Impossible d'ouvrir .secrets/private_key.pem pour écriture");
+            return;
+        }
+        PEM_write_PrivateKey(private_key_file, pkey, NULL, NULL, 0, NULL, NULL);
+        fclose(private_key_file);
+
+        // Sauvegarder la clé publique
+        FILE *public_key_file = fopen(".secrets/public_key.pem", "wb");
+        if (!public_key_file) {
+            perror("Impossible d'ouvrir .secrets/public_key.pem pour écriture");
+        }
+        PEM_write_PUBKEY(public_key_file, pkey);
+        fclose(public_key_file);
+
+        EVP_PKEY_free(pkey);
+        printf("Clés générées avec succès.\n");
     }
 }
 
