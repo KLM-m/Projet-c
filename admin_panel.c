@@ -2,13 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mysql.h>
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/core_names.h>
 #include "admin_panel.h"
 #include "database.h"
+#include "crypto_utils.h"
 
 static void construire_base_nom(const char* nom_fichier, char* base_nom, size_t max) {
     strncpy(base_nom, nom_fichier, max-1);
@@ -21,106 +17,6 @@ static void construire_base_nom(const char* nom_fichier, char* base_nom, size_t 
     if(len_base > len_suf && strcmp(base_nom + len_base - len_suf, suffix) == 0) {
         base_nom[len_base - len_suf] = '\0';
     }
-}
-
-static int evp_rsa_oaep_sha256_decrypt_pem(const char* pem_path, const unsigned char* inbuf, size_t inlen, unsigned char** outbuf, size_t* outlen) {
-    int ok = 0;
-    FILE* f = fopen(pem_path, "r");
-    if(!f) return 0;
-    EVP_PKEY* pkey = PEM_read_PrivateKey(f, NULL, NULL, NULL);
-    fclose(f);
-    if(!pkey) return 0;
-
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, NULL);
-    if(!ctx) goto cleanup;
-    if (EVP_PKEY_decrypt_init(ctx) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_oaep_md(ctx, EVP_sha256()) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, EVP_sha256()) <= 0) goto cleanup;
-
-    size_t tmplen = 0;
-    if (EVP_PKEY_decrypt(ctx, NULL, &tmplen, inbuf, inlen) <= 0) goto cleanup;
-    unsigned char* out = (unsigned char*)malloc(tmplen);
-    if (!out) goto cleanup;
-    if (EVP_PKEY_decrypt(ctx, out, &tmplen, inbuf, inlen) <= 0) { free(out); goto cleanup; }
-
-    *outbuf = out;
-    *outlen = tmplen;
-    ok = 1;
-cleanup:
-    if(ctx) EVP_PKEY_CTX_free(ctx);
-    EVP_PKEY_free(pkey);
-    return ok;
-}
-
-static int evp_rsa_oaep_sha256_encrypt_pem(const char* pub_pem_path, const unsigned char* inbuf, size_t inlen, unsigned char** outbuf, size_t* outlen) {
-    int ok = 0;
-    FILE* f = fopen(pub_pem_path, "r");
-    if(!f) return 0;
-    EVP_PKEY* pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
-    fclose(f);
-    if(!pkey) return 0;
-    size_t key_size = EVP_PKEY_size(pkey);
-    size_t max_plain = key_size - 2*EVP_MD_size(EVP_sha256()) - 2;
-    if (inlen > max_plain) { EVP_PKEY_free(pkey); return 0; }
-
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, NULL);
-    if(!ctx) goto cleanup;
-    if (EVP_PKEY_encrypt_init(ctx) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_oaep_md(ctx, EVP_sha256()) <= 0) goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, EVP_sha256()) <= 0) goto cleanup;
-
-    size_t tmplen = 0;
-    if (EVP_PKEY_encrypt(ctx, NULL, &tmplen, inbuf, inlen) <= 0) goto cleanup;
-    unsigned char* out = (unsigned char*)malloc(tmplen);
-    if (!out) goto cleanup;
-    if (EVP_PKEY_encrypt(ctx, out, &tmplen, inbuf, inlen) <= 0) { free(out); goto cleanup; }
-
-    *outbuf = out; *outlen = tmplen; ok = 1;
-cleanup:
-    if(ctx) EVP_PKEY_CTX_free(ctx);
-    EVP_PKEY_free(pkey);
-    return ok;
-}
-
-static int ecrire_pem_pub_temp(const char* base64, const char* chemin) {
-    FILE* f = fopen(chemin, "w");
-    if(!f) return 0;
-    fprintf(f, "-----BEGIN PUBLIC KEY-----\n");
-    size_t n = strlen(base64);
-    for(size_t i=0;i<n;i+=64) {
-        size_t k = (i+64<=n)?64:(n-i);
-        fwrite(base64+i, 1, k, f);
-        fputc('\n', f);
-    }
-    fprintf(f, "-----END PUBLIC KEY-----\n");
-    fclose(f);
-    return 1;
-}
-
-static int ecrire_pem_pub_depuis_bdd(const char* valeur, const char* chemin) {
-    // Si la valeur contient déjà un en-tête PEM, on l'écrit telle quelle
-    if (valeur && strstr(valeur, "BEGIN PUBLIC KEY") != NULL) {
-        FILE* f = fopen(chemin, "w");
-        if(!f) return 0;
-        fputs(valeur, f);
-        // S'assure qu'il termine par \n
-        size_t L = strlen(valeur);
-        if (L==0 || valeur[L-1] != '\n') fputc('\n', f);
-        fclose(f);
-        return 1;
-    }
-    // Sinon on recompose un PEM valide à partir du base64 seul
-    return ecrire_pem_pub_temp(valeur, chemin);
-}
-
-static void strip_ws(char* s) {
-    size_t w=0; for(size_t r=0; s[r]; ++r){
-        char c=s[r];
-        if(c!='\n' && c!='\r' && c!=' ' && c!='\t') s[w++]=c;
-    }
-    s[w]=0;
 }
 
 void panel_admin() {
@@ -362,54 +258,39 @@ void telecharger_et_dechiffrer_fichier() {
     
     printf("Fichier '%s' telecharge avec succes.\n", nom_fichier);
     
-    // Lire le fichier chiffre local
+    // Lire le fichier chiffré local (qui contient un nombre)
     FILE *fichier_chiffre = fopen(nom_fichier_local, "rb");
     if (!fichier_chiffre) {
         printf("Erreur : Impossible d'ouvrir le fichier telecharge %s\n", nom_fichier_local);
         return;
     }
-    fseek(fichier_chiffre, 0, SEEK_END);
-    long taille_fichier = ftell(fichier_chiffre);
-    fseek(fichier_chiffre, 0, SEEK_SET);
-    unsigned char *contenu_chiffre = (unsigned char*)malloc(taille_fichier);
-    if (!contenu_chiffre) { printf("Erreur : Memoire insuffisante.\n"); fclose(fichier_chiffre); return; }
-    fread(contenu_chiffre, 1, taille_fichier, fichier_chiffre);
+    ull contenu_chiffre;
+    if (fscanf(fichier_chiffre, "%llu", &contenu_chiffre) != 1) {
+        printf("Erreur: format de fichier chiffré invalide.\n");
+        fclose(fichier_chiffre);
+        return;
+    }
     fclose(fichier_chiffre);
 
-    // Verifier la taille attendue vs taille de cle
-    FILE* fkeysz = fopen(".secrets/private_key.pem", "r");
-    if(!fkeysz){ printf("Cle privee introuvable (.secrets/private_key.pem).\n"); free(contenu_chiffre); return; }
-    EVP_PKEY* pkeysz = PEM_read_PrivateKey(fkeysz, NULL, NULL, NULL); fclose(fkeysz);
-    if(!pkeysz){ printf("Cle privee invalide.\n"); free(contenu_chiffre); return; }
-    size_t rsa_block = EVP_PKEY_size(pkeysz);
-    EVP_PKEY_free(pkeysz);
-    if ((size_t)taille_fichier != rsa_block) {
-        printf("Fichier binaire inattendu (%ld octets). Attendu: %zu octets pour RSA.\n", taille_fichier, rsa_block);
-        printf("Regenerez le .bin avec l'utilitaire OAEP-SHA256 et la cle publique correspondante.\n");
-        free(contenu_chiffre);
+    // Charger la clé privée locale
+    RsaPrivateKey priv_key;
+    if (!charger_cle_privee(&priv_key, ".secrets/cle_privee.txt")) {
+        printf("Clé privée introuvable ou invalide (.secrets/cle_privee.txt).\n");
         return;
     }
 
-    // Dechiffrement OAEP-SHA256 (une seule brique RSA attendue)
-    unsigned char* contenu_dechiffre = NULL; size_t taille_dechiffree = 0;
-    if (!evp_rsa_oaep_sha256_decrypt_pem(".secrets/private_key.pem", contenu_chiffre, (size_t)taille_fichier, &contenu_dechiffre, &taille_dechiffree)) {
-        printf("Erreur lors du dechiffrement (OAEP-SHA256). Details OpenSSL:\n");
-        ERR_print_errors_fp(stderr);
-        free(contenu_chiffre);
-        return;
-    }
-    free(contenu_chiffre);
+    // Déchiffrement
+    ull contenu_dechiffre = dechiffrer_rsa(contenu_chiffre, priv_key);
 
     // Sauvegarder le fichier dechiffre en .txt lisible
     char base_nom[256];
     construire_base_nom(nom_fichier, base_nom, sizeof(base_nom));
     char nom_fichier_dechiffre[300];
     snprintf(nom_fichier_dechiffre, sizeof(nom_fichier_dechiffre), "dechiffre_%s.txt", base_nom);
-    FILE *fichier_dechiffre = fopen(nom_fichier_dechiffre, "wb");
-    if (!fichier_dechiffre) { printf("Erreur : Impossible de creer le fichier dechiffre.\n"); free(contenu_dechiffre); return; }
-    fwrite(contenu_dechiffre, 1, taille_dechiffree, fichier_dechiffre);
+    FILE *fichier_dechiffre = fopen(nom_fichier_dechiffre, "w");
+    if (!fichier_dechiffre) { printf("Erreur : Impossible de creer le fichier dechiffre.\n"); return; }
+    fprintf(fichier_dechiffre, "%llu", contenu_dechiffre);
     fclose(fichier_dechiffre);
-    free(contenu_dechiffre);
     remove(nom_fichier_local);
     printf("\nFichier dechiffre avec succes !\n");
     printf("Fichier sauvegarde sous : %s\n", nom_fichier_dechiffre);
@@ -442,20 +323,14 @@ void valider_fichier() {
     }
     MYSQL_ROW row = mysql_fetch_row(res);
     const char* nom_fichier = row[0];
-    const char* cle_pub_b64 = row[2];
+    const char* cle_pub_str = row[2];
 
-    if(!cle_pub_b64 || strlen(cle_pub_b64)==0) {
+    if(!cle_pub_str || strlen(cle_pub_str)==0) {
         printf("Le destinataire n'a pas de cle publique en BDD.\n");
         mysql_free_result(res);
         mysql_close(conn);
         return;
     }
-
-    // Copie et assainit la base64 (supprime espaces/retours)
-    char cle_copy[8192];
-    strncpy(cle_copy, cle_pub_b64, sizeof(cle_copy)-1);
-    cle_copy[sizeof(cle_copy)-1]='\0';
-    strip_ws(cle_copy);
 
     // Construire nom du fichier clair deja cree
     char base_nom[256];
@@ -464,51 +339,34 @@ void valider_fichier() {
     snprintf(nom_fichier_dechiffre, sizeof(nom_fichier_dechiffre), "dechiffre_%s.txt", base_nom);
 
     // Lire clair
-    FILE* fin = fopen(nom_fichier_dechiffre, "rb");
+    FILE* fin = fopen(nom_fichier_dechiffre, "r");
     if(!fin) {
         printf("Fichier clair introuvable (%s). Veuillez d'abord le telecharger et le dechiffrer.\n", nom_fichier_dechiffre);
         mysql_free_result(res);
         mysql_close(conn);
         return;
     }
-    fseek(fin, 0, SEEK_END); long sz = ftell(fin); fseek(fin, 0, SEEK_SET);
-    unsigned char* buf = (unsigned char*)malloc(sz);
-    fread(buf,1,sz,fin); fclose(fin);
+    ull message_clair;
+    fscanf(fin, "%llu", &message_clair);
+    fclose(fin);
 
-    // Ecrire la cle publique destinataire en PEM temporaire
-    char chemin_pub_tmp[64] = ".secrets/tmp_dest_pub.pem";
-    if (!ecrire_pem_pub_depuis_bdd(cle_copy, chemin_pub_tmp)) {
-        printf("Impossible d'ecrire la cle publique destinataire.\n");
-        free(buf); mysql_free_result(res); mysql_close(conn); return;
+    // Parser la clé publique du destinataire depuis la BDD
+    RsaPublicKey pub_key_dest;
+    if (sscanf(cle_pub_str, "%llu,%llu", &pub_key_dest.e, &pub_key_dest.n) != 2) {
+        printf("Format de clé publique du destinataire invalide dans la BDD.\n");
+        mysql_free_result(res);
+        mysql_close(conn);
+        return;
     }
 
-    // Verifier limite OAEP pour cette cle
-    FILE* fpubsz = fopen(chemin_pub_tmp, "r");
-    if(!fpubsz){ printf("Cle publique destinataire inaccessible.\n"); free(buf); remove(chemin_pub_tmp); mysql_free_result(res); mysql_close(conn); return; }
-    EVP_PKEY* pksz = PEM_read_PUBKEY(fpubsz, NULL, NULL, NULL); fclose(fpubsz);
-    if(!pksz){ printf("Cle publique destinataire invalide (PEM).\n"); free(buf); remove(chemin_pub_tmp); mysql_free_result(res); mysql_close(conn); return; }
-    size_t key_size = EVP_PKEY_size(pksz);
-    size_t max_plain = key_size - 2*EVP_MD_size(EVP_sha256()) - 2;
-    EVP_PKEY_free(pksz);
-    if((size_t)sz > max_plain){
-        printf("Contenu trop grand pour RSA-OAEP (%ld octets > max %zu). Utilisez un fichier plus petit ou un chiffrement hybride.\n", sz, max_plain);
-        remove(chemin_pub_tmp); free(buf); mysql_free_result(res); mysql_close(conn); return;
-    }
-
-    // Chiffrement OAEP-SHA256 (fichier court)
-    unsigned char* out = NULL; size_t outlen = 0;
-    if (!evp_rsa_oaep_sha256_encrypt_pem(chemin_pub_tmp, buf, (size_t)sz, &out, &outlen)) {
-        printf("Echec chiffrement pour destinataire (OAEP-SHA256). Details OpenSSL:\n");
-        ERR_print_errors_fp(stderr);
-        remove(chemin_pub_tmp);
-        free(buf); mysql_free_result(res); mysql_close(conn); return;
-    }
-    remove(chemin_pub_tmp);
+    // Chiffrement pour le destinataire
+    ull message_chiffre_dest = chiffrer_rsa(message_clair, pub_key_dest);
 
     char nom_sortie[320];
     snprintf(nom_sortie, sizeof(nom_sortie), "pour_dest_%s.bin", base_nom);
-    FILE* fout = fopen(nom_sortie, "wb"); fwrite(out,1,outlen,fout); fclose(fout);
-    free(buf); free(out);
+    FILE* fout = fopen(nom_sortie, "w");
+    fprintf(fout, "%llu", message_chiffre_dest);
+    fclose(fout);
 
     // Mettre a jour le statut
     sprintf(requete, "UPDATE fichier SET statut='valide' WHERE id=%d", id_fichier);

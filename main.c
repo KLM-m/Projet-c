@@ -6,15 +6,13 @@
 #ifdef _WIN32
 #include <direct.h> // Pour mkdir sous Windows
 #endif
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <openssl/evp.h> // Pour la nouvelle API
 #include "admin_connexion.h"
+#include "crypto_utils.h"
 
 // Fonction utilitaire : vérifie l'existence d'un fichier
 int fichier_existant(const char* chemin) {
-    struct stat buffer;
+#include "crypto_utils.h"    struct stat buffer;
+
     return (stat(chemin, &buffer) == 0);
 }
 
@@ -35,48 +33,31 @@ void creer_dossier_secrets() {
 
 // Génération/vérification clés: uniquement local (.secrets), pas d'insertion BDD ici
 void verifier_ou_generer_cle_locale() {
+    const char* chemin_priv = ".secrets/cle_privee.txt";
+    const char* chemin_pub = ".secrets/cle_publique.txt";
+
+    const char* chemin_priv = ".secrets/cle_privee.txt";
+    const char* chemin_pub = ".secrets/cle_publique.txt";
+
     creer_dossier_secrets();
-    if (!fichier_existant(".secrets/private_key.pem") || !fichier_existant(".secrets/public_key.pem")) {
-        printf("Génération de la paire de clés RSA (2048 bits)...\n");
+    if (!fichier_existant(chemin_priv) || !fichier_existant(chemin_pub)) {
+        printf("Génération de la paire de clés RSA (simplifiée)...\n");
+    if (!fichier_existant(chemin_priv) || !fichier_existant(chemin_pub)) {
+        printf("Génération de la paire de clés RSA (simplifiée)...\n");
 
-        EVP_PKEY *pkey = NULL;
-        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+        RsaPublicKey pub_key;
+        RsaPrivateKey priv_key;;
+        RsaPublicKey pub_key
+        RsaPrivateKey priv_key;        generer_paire_cles_rsa(&pub_key, &priv_key);
+ generer_paire_cles_rsa(&pub_key,&prv_key);
 
-        if (!ctx || EVP_PKEY_keygen_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
-            fprintf(stderr, "Erreur lors de la génération de la clé RSA.\n");
-            ERR_print_errors_fp(stderr);
-            if(ctx) EVP_PKEY_CTX_free(ctx);
-            return;
+        i
+        if (sauvegarder_cles(pub_key, priv_key, chemin_pub, chemin_priv)) {
+            printf("Clés générées avec succès.\n");
         }
-
-        if (EVP_PKEY_generate(ctx, &pkey) <= 0) {
-            fprintf(stderr, "Erreur lors de la génération de la clé RSA.\n");
-            ERR_print_errors_fp(stderr);
-            EVP_PKEY_CTX_free(ctx);
-            return;
-        }
-        EVP_PKEY_CTX_free(ctx);
-
-        // Sauvegarder la clé privée
-        FILE *private_key_file = fopen(".secrets/private_key.pem", "wb");
-        if (!private_key_file) {
-            perror("Impossible d'ouvrir .secrets/private_key.pem pour écriture");
-            return;
-        }
-        PEM_write_PrivateKey(private_key_file, pkey, NULL, NULL, 0, NULL, NULL);
-        fclose(private_key_file);
-
-        // Sauvegarder la clé publique
-        FILE *public_key_file = fopen(".secrets/public_key.pem", "wb");
-        if (!public_key_file) {
-            perror("Impossible d'ouvrir .secrets/public_key.pem pour écriture");
-        }
-        PEM_write_PUBKEY(public_key_file, pkey);
-        fclose(public_key_file);
-
-        EVP_PKEY_free(pkey);
-        printf("Clés générées avec succès.\n");
-    }
+    }urn;
+        if (sauvegarder_cles(pb_key, piv_key, chemi_pub, chemin_priv)) {
+            printf("Clés générées avec succès.\n")
 }
 
 // Prototypes à remplir selon tes fonctions de gestion utilisateur et admin
