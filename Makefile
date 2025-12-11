@@ -7,27 +7,42 @@ LIBS = -lmariadb -lssl -lcrypto
 EXEC = messagard
 EXEC_TEST = test_chiffreur
 
-SRCS = main.c admin_panel.c admin_connexion.c database.c custom_rsa.c
+# J'ai ajouté ici tous les nouveaux modules clients
+SRCS = main.c \
+       admin_panel.c \
+       admin_connexion.c \
+       database.c \
+       custom_rsa.c \
+       client_auth.c \
+       accueil_users.c \
+       client_messaging.c \
+       client_files.c \
+       client_social.c \
+       client_security.c
+
 OBJS = $(SRCS:.c=.o)
 
 SRCS_TEST = chiffrer_test_admin.c
 OBJS_TEST = $(SRCS_TEST:.c=.o)
 
-
+# Règle principale
 all: $(EXEC)
 
+# Linkage de l'exécutable principal
 $(EXEC): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+# Règle de test
 test: $(EXEC_TEST)
 
-$(EXEC_TEST): $(OBJS_TEST)
+# Linkage du test (Attention: si le test utilise custom_rsa, il faut l'ajouter ici aussi)
+$(EXEC_TEST): $(OBJS_TEST) custom_rsa.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+# Compilation des fichiers objets (.c -> .o)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Nettoyage
 clean:
-	rm -f $(OBJS) $(OBJS_TEST) $(EXEC) $(EXEC_TEST) *.exe
-
-.PHONY: all test clean
+	rm -f $(OBJS) $(OBJS_TEST) $(EXEC).exe $(EXEC_TEST).exe *.o

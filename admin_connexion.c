@@ -47,16 +47,13 @@ int menu_admin_connexion() {
     printf("Mot de passe : ");
     scanf("%99s", mot_de_passe);
 
-    char hash_saisi[65];
-    hash_password(mot_de_passe, hash_saisi);
-
     MYSQL *conn = get_db_connection();
     if (!conn) {
         return 0;
     }
 
     char requete[300];
-    sprintf(requete, "SELECT mot_de_passe, admin FROM utilisateur WHERE email='%s'", email);
+    sprintf(requete, "SELECT mot_de_passe, admin, salt FROM utilisateur WHERE email='%s'", email);
 
     if(mysql_query(conn, requete)) {
         printf("Erreur requete : %s\n", mysql_error(conn));
@@ -69,6 +66,15 @@ int menu_admin_connexion() {
         MYSQL_ROW row = mysql_fetch_row(resultat);
         char* hash_bdd = row[0];
         int admin = atoi(row[1]);
+        char* salt = row[2];
+        
+        // Concaténer le mot de passe avec le salt avant de hasher
+        char mdp_salt[200];
+        snprintf(mdp_salt, sizeof(mdp_salt), "%s%s", mot_de_passe, salt);
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256((unsigned char*)mdp_salt, strlen(mdp_salt), hash);
+        char hash_saisi[65];
+        for(int i=0; i<SHA256_DIGEST_LENGTH; i++) sprintf(hash_saisi + (i*2), "%02x", hash[i]);
         
         if (strcmp(hash_saisi, hash_bdd) == 0 && admin == 1) {
             char cle_pub_b64[4096] = {0};
